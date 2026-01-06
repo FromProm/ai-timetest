@@ -1,0 +1,35 @@
+{
+  "prompt_id": "524e7f72-7759-4036-afc6-9b9e14710da9",
+  "prompt": "다음 내용을 요약해주세요: {{content}}",
+  "prompt_type": "type_a",
+  "examples": [
+    {
+      "index": 0,
+      "input": {
+        "content": "{\"content\": \"\\uc778\\uacf5\\uc9c0\\ub2a5\\uc740 \\ud604\\uc7ac \\ub9ce\\uc740 \\ubd84\\uc57c\\uc5d0\\uc11c \\ud65c\\uc6a9\\ub418\\uace0 \\uc788\\uc2b5\\ub2c8\\ub2e4. \\ud2b9\\ud788 \\uc790\\uc5f0\\uc5b4 \\ucc98\\ub9ac, \\ucef4\\ud4e8\\ud130 \\ube44\\uc804, \\uc74c\\uc131 \\uc778\\uc2dd \\ub4f1\\uc758 \\uc601\\uc5ed\\uc5d0\\uc11c \\ud070 \\ubc1c\\uc804\\uc744 \\ubcf4\\uc774\\uace0 \\uc788\\uc2b5\\ub2c8\\ub2e4.\"}",
+        "input_type": "text"
+      },
+      "output": "요약하면 다음과 같습니다:\n\n인공지능 기술은 현재 다양한 분야에서 널리 활용되고 있습니다. 특히 자연어 처리, 컴퓨터 비전, 음성 인식 등의 영역에서 큰 발전을 이루어 왔습니다. 이러한 기술들은 사용자에게 편의성을 제공하고, 기존에 불가능했던 작업들을 가능하게 하는 등 많은 혜택을 가져다 주고 있습니다.",
+      "output_s3_url": null
+    },
+    {
+      "index": 1,
+      "input": {
+        "content": "{\"content\": \"\\uae30\\ud6c4 \\ubcc0\\ud654\\ub294 \\uc9c0\\uad6c \\uc628\\ub09c\\ud654\\ub85c \\uc778\\ud574 \\ubc1c\\uc0dd\\ud558\\ub294 \\ud604\\uc0c1\\uc785\\ub2c8\\ub2e4. \\uc774\\ub294 \\ud574\\uc218\\uba74 \\uc0c1\\uc2b9, \\uadf9\\uc9c0\\ubc29 \\ube59\\ud558 \\uc735\\ud574, \\uae30\\uc0c1 \\uc774\\ubcc0 \\ub4f1\\uc744 \\uc57c\\uae30\\ud569\\ub2c8\\ub2e4.\"}",
+        "input_type": "text"
+      },
+      "output": "요약하면 다음과 같습니다:\n\n기후 변화는 지구 온난화로 인해 발생하는 현상입니다. 이로 인해 해수면 상승, 극지방 빙하 융해, 기상 이변 등이 일어나고 있습니다. 이러한 기후 변화는 전 세계적으로 심각한 환경 문제를 야기하고 있습니다.",
+      "output_s3_url": null
+    },
+    {
+      "index": 2,
+      "input": {
+        "content": "{\"content\": \"\\ube14\\ub85d\\uccb4\\uc778 \\uae30\\uc220\\uc740 \\ubd84\\uc0b0 \\uc6d0\\uc7a5 \\uae30\\uc220\\ub85c, \\uc554\\ud638\\ud654\\ud3d0\\ubfd0\\ub9cc \\uc544\\ub2c8\\ub77c \\uacf5\\uae09\\ub9dd \\uad00\\ub9ac, \\ub514\\uc9c0\\ud138 \\uc2e0\\uc6d0 \\ud655\\uc778 \\ub4f1 \\ub2e4\\uc591\\ud55c \\ubd84\\uc57c\\uc5d0 \\uc801\\uc6a9\\ub418\\uace0 \\uc788\\uc2b5\\ub2c8\\ub2e4.\"}",
+        "input_type": "text"
+      },
+      "output": "요약하면 다음과 같습니다:\n\n블록체인 기술은 분산 원장 기술로, 암호화폐뿐만 아니라 공급망 관리, 디지털 신원 확인 등 다양한 분야에 적용되고 있습니다. 블록체인은 중앙 관리 없이 데이터를 안전하게 저장하고 공유할 수 있는 분산형 시스템입니다. 이를 통해 거래의 투명성과 보안성을 높일 수 있어 많은 산업에서 활용되고 있습니다.",
+      "output_s3_url": null
+    }
+  ],
+  "created_at": "2026-01-06T07:03:53.863972Z"
+}

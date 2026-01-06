@@ -18,7 +18,6 @@ class TokenStage:
         """
         토큰 사용량 계산
         - 고정 프롬프트 부분의 토큰 수 계산 ({{}} 제외)
-        - 토큰 수 자체를 점수로 반환
         """
         logger.info("Calculating token usage")
         

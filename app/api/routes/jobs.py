@@ -58,15 +58,32 @@ async def create_job(request: JobCreateRequest, background_tasks: BackgroundTask
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str):
-    """작업 조회"""
+    """작업 조회 - 완료될 때까지 대기"""
     try:
         context = get_context()
         storage = context.get_storage()
+        
+        # 작업이 완료될 때까지 폴링
+        max_wait_time = 300  # 5분 최대 대기
+        poll_interval = 2    # 2초마다 확인
+        waited_time = 0
+        
+        while waited_time < max_wait_time:
+            job = await storage.get_job(job_id)
+            
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+            
+            # 완료되었거나 실패한 경우 즉시 반환
+            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED]:
+                return job
+            
+            # 아직 실행 중이면 잠시 대기
+            await asyncio.sleep(poll_interval)
+            waited_time += poll_interval
+        
+        # 타임아웃된 경우 현재 상태 반환
         job = await storage.get_job(job_id)
-        
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
         return job
         
     except HTTPException:

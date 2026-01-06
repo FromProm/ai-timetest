@@ -1,0 +1,55 @@
+{
+  "PK": "PROMPT#20ffd64f-ca29-4464-8cec-9669ee57a435",
+  "SK": "METADATA",
+  "GSI1_PK": "USER_PROMPT_LIST",
+  "GSI1_SK": null,
+  "Type": "PROMPT",
+  "create_user": null,
+  "title": "사실 기반 질문 테스트",
+  "content": "다음 질문에 정확하게 답변해주세요: {{input}}",
+  "description": null,
+  "prompt_type": "type_a",
+  "examples": [
+    {
+      "index": 0,
+      "input": {
+        "content": "대한민국의 수도는 어디인가요?",
+        "input_type": "text"
+      },
+      "output": "대한민국의 수도는 서울입니다. \n\n서울은 대한민국의 정치, 경제, 문화의 중심지로, 인구 약 1,000만 명의 대도시입니다. 한강을 중심으로 남북으로 나뉘어 있으며, 고층 빌딩과 현대적인 건물들 사이에 고궁과 같은 역사적 유적들이 공존하고 있습니다.\n\n서울은 1394년부터 조선의 수도였으며, 대한민국 정부 수립 이후에도 계속해서 수도의 역할을 하고 있습니다."
+    },
+    {
+      "index": 1,
+      "input": {
+        "content": "지구에서 태양까지의 거리는 얼마인가요?",
+        "input_type": "text"
+      },
+      "output": "지구에서 태양까지의 평균 거리는 약 1억 4960만 km(1억 4960만 킬로미터)입니다. \n\n이 거리는 천문 단위(AU, Astronomical Unit)로도 표현되며, 1AU는 지구와 태양 사이의 평균 거리를 나타냅니다.\n\n몇 가지 추가 정보:\n\n1. 지구의 궤도는 완벽한 원이 아니라 타원형이기 때문에, 실제 거리는 계절에 따라 조금씩 변합니다.\n\n2. 가장 가까울 때(근일점)의 거리는 약 1억 4700만 km입니다.\n\n3. 가장 멀 때(원일점)의 거리는 약 1억 5200만 km입니다.\n\n4. 빛이 태양에서 지구까지 도달하는 데 걸리는 시간은 약 8분 20초입니다.\n\n이 거리는 천문학에서 매우 중요한 기준이 되며, 태양계 내의 다른 거리를 측정하는 데 자주 사용됩니다."
+    },
+    {
+      "index": 2,
+      "input": {
+        "content": "물의 화학식은 무엇인가요?",
+        "input_type": "text"
+      },
+      "output": "물의 화학식은 H2O입니다.\n\n이는 다음을 의미합니다:\n- H: 수소 원자 2개\n- O: 산소 원자 1개\n\n따라서 물 분자는 2개의 수소 원자와 1개의 산소 원자로 구성되어 있습니다."
+    }
+  ],
+  "examples_s3_url": "s3://prom-test11/prompts/20ffd64f-ca29-4464-8cec-9669ee57a435/examples.json",
+  "recommended_model": null,
+  "evaluation_metrics": {
+    "token_usage": 18.0,
+    "information_density": 91.39635774977864,
+    "consistency": 0.0,
+    "model_variance": 96.63224410314393,
+    "hallucination": 75.5958294003621,
+    "relevance": 100.0
+  },
+  "status": "completed",
+  "created_at": "2026-01-06T07:53:33.285045Z",
+  "updated_at": "2026-01-06T07:56:04.827228Z",
+  "like_count": 0,
+  "comment_count": 0,
+  "bookmark_count": 0,
+  "is_public": false
+}

@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     cache_ttl: int = 3600  # 1 hour
     
     # Mock Mode (테스트용)
-    mock_mode: bool = True  # AWS 없이 테스트할 때 True
+    mock_mode: bool = False  # AWS 없이 테스트할 때 True
     
     class Config:
         env_file = ".env"
