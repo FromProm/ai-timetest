@@ -45,76 +45,165 @@ class EmbedStage:
             raise
     
     async def _embed_inputs(self, embedder, example_inputs: List[ExampleInput]) -> List[Dict[str, Any]]:
-        """입력 임베딩 생성"""
-        input_embeddings = []
+        """입력 임베딩 생성 (병렬 처리)"""
         
-        for i, example_input in enumerate(example_inputs):
+        async def embed_single_input(i: int, example_input: ExampleInput) -> Dict[str, Any]:
+            """단일 입력 임베딩"""
             logger.info(f"Embedding input {i+1}/{len(example_inputs)}")
             
-            # 텍스트와 이미지에 따라 다른 모델 사용
             if example_input.input_type == "image":
-                # 이미지 임베딩 (Nova Multimodal + Cohere v4)
-                nova_emb = await embedder.embed_multimodal(example_input.content)
-                cohere_emb = await embedder.embed_cohere_v4(example_input.content)
-                
-                input_embeddings.append({
-                    'index': i,
-                    'content': example_input.content,
-                    'type': example_input.input_type,
-                    'nova_embedding': nova_emb,
-                    'cohere_embedding': cohere_emb
-                })
+                # 이미지 입력 임베딩 (Titan Multimodal + Cohere v4) - 병렬
+                try:
+                    titan_task = embedder.embed_image_titan(example_input.content)
+                    cohere_task = embedder.embed_image_cohere(example_input.content)
+                    titan_emb, cohere_emb = await asyncio.gather(titan_task, cohere_task)
+                    
+                    return {
+                        'index': i,
+                        'content': example_input.content[:100] + '...',
+                        'type': example_input.input_type,
+                        'titan_embedding': titan_emb,
+                        'cohere_embedding': cohere_emb
+                    }
+                except Exception as e:
+                    logger.error(f"Image input embedding failed: {str(e)}")
+                    return {
+                        'index': i,
+                        'content': example_input.content[:100] + '...',
+                        'type': example_input.input_type,
+                        'titan_embedding': None,
+                        'cohere_embedding': None
+                    }
             else:
-                # 텍스트 임베딩 (Titan Text + Cohere Multilingual)
-                titan_emb = await embedder.embed_text(example_input.content)
-                cohere_emb = await embedder.embed_multilingual(example_input.content)
+                # 텍스트 입력 임베딩 (Titan Text + Cohere Multilingual) - 병렬
+                titan_task = embedder.embed_text(example_input.content)
+                cohere_task = embedder.embed_multilingual(example_input.content)
+                titan_emb, cohere_emb = await asyncio.gather(titan_task, cohere_task)
                 
-                input_embeddings.append({
+                return {
                     'index': i,
                     'content': example_input.content,
                     'type': example_input.input_type,
                     'titan_embedding': titan_emb,
                     'cohere_embedding': cohere_emb
-                })
+                }
         
-        return input_embeddings
+        # 모든 입력을 병렬로 임베딩
+        tasks = [embed_single_input(i, inp) for i, inp in enumerate(example_inputs)]
+        results = await asyncio.gather(*tasks)
+        
+        # 인덱스 순서대로 정렬
+        return sorted(results, key=lambda x: x['index'])
     
     async def _embed_outputs(self, embedder, executions: List[Dict], prompt_type: PromptType) -> List[Dict[str, Any]]:
-        """출력 임베딩 생성"""
-        output_embeddings = []
+        """출력 임베딩 생성 (병렬 처리)"""
         
-        for exec_data in executions:
+        async def embed_single_output(output_idx: int, output: str, is_image_type: bool) -> Dict[str, Any]:
+            """단일 출력 임베딩"""
+            if not output or not output.strip():
+                return {
+                    'output_index': output_idx,
+                    'content': output,
+                    'titan_embedding': None,
+                    'cohere_embedding': None
+                }
+            
+            if is_image_type:
+                # 이미지 생성 타입
+                if self._is_base64_image(output):
+                    try:
+                        titan_task = embedder.embed_image_titan(output)
+                        cohere_task = embedder.embed_image_cohere(output)
+                        titan_emb, cohere_emb = await asyncio.gather(titan_task, cohere_task)
+                        
+                        return {
+                            'output_index': output_idx,
+                            'content': output[:100] + '...',
+                            'is_image': True,
+                            'titan_embedding': titan_emb,
+                            'cohere_embedding': cohere_emb
+                        }
+                    except Exception as e:
+                        logger.error(f"Image output embedding failed: {str(e)}")
+                        return {
+                            'output_index': output_idx,
+                            'content': output[:100] + '...',
+                            'is_image': True,
+                            'titan_embedding': None,
+                            'cohere_embedding': None
+                        }
+                else:
+                    logger.warning(f"Output {output_idx} is not a valid base64 image")
+                    return {
+                        'output_index': output_idx,
+                        'content': output[:200],
+                        'is_image': False,
+                        'titan_embedding': None,
+                        'cohere_embedding': None
+                    }
+            else:
+                # 텍스트 출력 임베딩 - 병렬
+                titan_task = embedder.embed_text(output)
+                cohere_task = embedder.embed_multilingual(output)
+                titan_emb, cohere_emb = await asyncio.gather(titan_task, cohere_task)
+                
+                return {
+                    'output_index': output_idx,
+                    'content': output,
+                    'is_image': False,
+                    'titan_embedding': titan_emb,
+                    'cohere_embedding': cohere_emb
+                }
+        
+        async def embed_execution_group(exec_data: Dict) -> Dict[str, Any]:
+            """단일 실행 그룹의 모든 출력 임베딩"""
             input_index = exec_data['input_index']
             outputs = exec_data['outputs']
+            is_image_type = prompt_type == PromptType.TYPE_B_IMAGE
             
             logger.info(f"Embedding outputs for input {input_index+1}")
             
-            exec_embeddings = []
-            for output_idx, output in enumerate(outputs):
-                if not output.strip():
-                    # 빈 출력은 제로 벡터로 처리
-                    exec_embeddings.append({
-                        'output_index': output_idx,
-                        'content': output,
-                        'titan_embedding': None,
-                        'cohere_embedding': None
-                    })
-                    continue
-                
-                # 출력은 항상 텍스트로 처리
-                titan_emb = await embedder.embed_text(output)
-                cohere_emb = await embedder.embed_multilingual(output)
-                
-                exec_embeddings.append({
-                    'output_index': output_idx,
-                    'content': output,
-                    'titan_embedding': titan_emb,
-                    'cohere_embedding': cohere_emb
-                })
+            # 해당 입력의 모든 출력을 병렬로 임베딩
+            tasks = [embed_single_output(idx, out, is_image_type) for idx, out in enumerate(outputs)]
+            exec_embeddings = await asyncio.gather(*tasks)
             
-            output_embeddings.append({
+            # output_index 순서대로 정렬
+            exec_embeddings = sorted(exec_embeddings, key=lambda x: x['output_index'])
+            
+            return {
                 'input_index': input_index,
                 'embeddings': exec_embeddings
-            })
+            }
         
-        return output_embeddings
+        # 모든 실행 그룹을 병렬로 처리
+        tasks = [embed_execution_group(exec_data) for exec_data in executions]
+        results = await asyncio.gather(*tasks)
+        
+        # input_index 순서대로 정렬
+        return sorted(results, key=lambda x: x['input_index'])
+    
+    def _is_base64_image(self, content: str) -> bool:
+        """base64 이미지인지 확인"""
+        if not content:
+            return False
+        
+        # 일반적인 base64 이미지 패턴 확인
+        # PNG: iVBORw0KGgo...
+        # JPEG: /9j/4AAQ...
+        content = content.strip()
+        
+        if content.startswith('iVBORw0KGgo'):  # PNG
+            return True
+        if content.startswith('/9j/'):  # JPEG
+            return True
+        
+        # 최소 길이 확인 (이미지는 보통 길다)
+        if len(content) > 1000:
+            try:
+                import base64
+                base64.b64decode(content[:100])
+                return True
+            except:
+                pass
+        
+        return False

@@ -97,6 +97,36 @@ class MockJudge(BaseJudge):
                 "overall_assessment": f"전체적으로 {compliance_status} 상태입니다."
             }, ensure_ascii=False)
         
+    async def evaluate_image(self, prompt: str, image_base64: str) -> str:
+        """가짜 이미지 평가 메서드 (VLM 시뮬레이션)"""
+        import json
+        
+        # 이미지가 유효한지 간단히 확인
+        is_valid_image = (
+            image_base64 and 
+            len(image_base64) > 100 and
+            (image_base64.startswith('/9j/') or image_base64.startswith('iVBORw0KGgo'))
+        )
+        
+        if not is_valid_image:
+            return json.dumps({
+                "explicit_conditions_compliance": [],
+                "direction_compliance": {"status": "안지킴", "reason": "유효한 이미지가 아님"},
+                "overall_assessment": "이미지 생성 실패"
+            }, ensure_ascii=False)
+        
+        # Mock 평가 결과 생성
+        status = random.choice(["지킴", "지킴", "애매함"])  # 대부분 지킴으로
+        
+        return json.dumps({
+            "explicit_conditions_compliance": [
+                {"condition": "이미지 생성", "status": status, "reason": "이미지가 정상적으로 생성됨"},
+                {"condition": "프롬프트 반영", "status": status, "reason": "프롬프트 내용이 이미지에 반영됨"}
+            ],
+            "direction_compliance": {"status": status, "reason": "전체적인 방향성 준수"},
+            "overall_assessment": f"이미지가 프롬프트 요구사항을 {status} 상태입니다."
+        }, ensure_ascii=False)
+    
     async def analyze_text(self, prompt: str) -> str:
         """가짜 텍스트 분석 메서드"""
         

@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import numpy as np
 from typing import Dict, Any, Optional, List
 from app.orchestrator.context import ExecutionContext
@@ -38,7 +39,7 @@ class VarianceStage:
         recommended_model: Optional[str] = None
     ) -> MetricScore:
         """
-        모델별 성능 편차 계산
+        모델별 성능 편차 계산 (병렬 처리)
         - 3개 모델로 동일 입력 실행
         - 각 입력별로 3개 출력 생성 (총 9개)
         - 임베딩 기반 유사도 계산
@@ -54,75 +55,83 @@ class VarianceStage:
             runner = self.context.get_runner()
             embedder = self.context.get_embedder()
             
-            all_variance_scores = []
-            details = {'per_input_scores': [], 'models_used': models}
-            
-            # 각 예시 입력별로 처리
-            for i, example_input in enumerate(example_inputs):
+            # 각 예시 입력별로 병렬 처리
+            async def process_single_input(i: int, example_input: ExampleInput) -> Dict[str, Any]:
+                """단일 입력에 대한 모든 모델 실행 및 임베딩"""
                 logger.info(f"Processing input {i+1}/{len(example_inputs)} with {len(models)} models")
                 
-                # 프롬프트에 입력 삽입
                 filled_prompt = self._fill_prompt(prompt, example_input.content)
                 
-                # 각 모델로 실행
-                model_outputs = {}
-                for model in models:
+                # 모든 모델 병렬 실행
+                async def run_model(model: str) -> tuple:
                     try:
                         result = await runner.invoke(
                             model=model,
                             prompt=filled_prompt,
                             input_type=example_input.input_type
                         )
-                        model_outputs[model] = result['output']
+                        return (model, result['output'])
                     except Exception as e:
                         logger.error(f"Failed to run {model}: {str(e)}")
-                        model_outputs[model] = ""  # 실패시 빈 출력
+                        return (model, "")
                 
-                # 출력들을 임베딩으로 변환
-                embeddings = {}
-                for model, output in model_outputs.items():
+                model_tasks = [run_model(model) for model in models]
+                model_results = await asyncio.gather(*model_tasks)
+                model_outputs = dict(model_results)
+                
+                # 모든 출력 병렬 임베딩
+                async def embed_output(model: str, output: str) -> tuple:
                     if not output.strip():
-                        embeddings[model] = None
-                        continue
+                        return (model, None)
                     
                     try:
-                        # 프롬프트 타입에 따라 적절한 임베딩 모델 선택
                         if prompt_type == PromptType.TYPE_B_IMAGE:
-                            # 이미지 출력: Nova Multimodal 사용
-                            embedding = await embedder.embed_multimodal(output)
+                            if self._is_base64_image(output):
+                                embedding = await embedder.embed_image_cohere(output)
+                            else:
+                                embedding = None
                         else:
-                            # 텍스트 출력: Titan Text 사용
                             embedding = await embedder.embed_text(output)
-                        
-                        embeddings[model] = embedding
+                        return (model, embedding)
                     except Exception as e:
                         logger.error(f"Failed to embed output from {model}: {str(e)}")
-                        embeddings[model] = None
+                        return (model, None)
+                
+                embed_tasks = [embed_output(model, output) for model, output in model_outputs.items()]
+                embed_results = await asyncio.gather(*embed_tasks)
+                embeddings = dict(embed_results)
                 
                 # 유효한 임베딩만 필터링
                 valid_embeddings = {k: v for k, v in embeddings.items() if v is not None}
                 
                 if len(valid_embeddings) < 2:
                     logger.warning(f"Not enough valid embeddings for input {i}")
-                    all_variance_scores.append(0.0)
-                    details['per_input_scores'].append({
+                    return {
                         'input_index': i,
                         'score': 0.0,
                         'reason': 'insufficient_valid_outputs',
-                        'valid_models': list(valid_embeddings.keys())
-                    })
-                    continue
+                        'valid_models': list(valid_embeddings.keys()),
+                        'model_outputs': model_outputs
+                    }
                 
-                # 모델 간 유사도 계산
                 variance_score = self._calculate_model_variance(valid_embeddings)
-                all_variance_scores.append(variance_score)
-                
-                details['per_input_scores'].append({
+                return {
                     'input_index': i,
                     'score': variance_score,
                     'valid_models': list(valid_embeddings.keys()),
-                    'model_outputs': model_outputs  # 전체 출력 저장 (자르지 않음)
-                })
+                    'model_outputs': model_outputs
+                }
+            
+            # 모든 입력 병렬 처리
+            input_tasks = [process_single_input(i, inp) for i, inp in enumerate(example_inputs)]
+            per_input_results = await asyncio.gather(*input_tasks)
+            
+            # 결과 정리
+            all_variance_scores = [r['score'] for r in per_input_results]
+            details = {
+                'per_input_scores': sorted(per_input_results, key=lambda x: x['input_index']),
+                'models_used': models
+            }
             
             # 전체 평균 점수 (100점 만점)
             final_score = (sum(all_variance_scores) / len(all_variance_scores) * 100) if all_variance_scores else 0.0
@@ -179,6 +188,28 @@ class VarianceStage:
         
         # 0-1 범위로 정규화 (cosine은 -1~1 범위)
         return (similarity + 1) / 2
+    
+    def _is_base64_image(self, content: str) -> bool:
+        """base64 이미지인지 확인"""
+        if not content:
+            return False
+        
+        content = content.strip()
+        
+        if content.startswith('iVBORw0KGgo'):  # PNG
+            return True
+        if content.startswith('/9j/'):  # JPEG
+            return True
+        
+        if len(content) > 1000:
+            try:
+                import base64
+                base64.b64decode(content[:100])
+                return True
+            except:
+                pass
+        
+        return False
     
     def _fill_prompt(self, prompt: str, input_content: str) -> str:
         """프롬프트의 {{변수명}} 플레이스홀더를 실제 입력으로 치환"""

@@ -121,7 +121,61 @@ class BedrockJudge(BaseJudge):
         except Exception as e:
             logger.error(f"Text analysis failed: {str(e)}")
             return f"분석 실패: {str(e)}"
-        """Judge 프롬프트 구성"""
+    
+    async def evaluate_image(self, prompt: str, image_base64: str) -> str:
+        """
+        VLM을 사용한 이미지 평가 메서드
+        Claude 3 Haiku Vision 사용
+        """
+        try:
+            # 이미지 타입 감지
+            if image_base64.startswith('/9j/'):
+                media_type = 'image/jpeg'
+            else:
+                media_type = 'image/png'
+            
+            body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 2000,
+                "temperature": 0.3,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": image_base64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            }
+            
+            response = self.client.invoke_model(
+                modelId=self.judge_model,  # Claude 3 Haiku (VLM 지원)
+                body=json.dumps(body),
+                contentType='application/json'
+            )
+            
+            response_body = json.loads(response['body'].read())
+            content = response_body.get('content', [])
+            result = content[0].get('text', '') if content else ''
+            
+            return result.strip()
+            
+        except Exception as e:
+            logger.error(f"Image evaluation failed: {str(e)}")
+            return f"이미지 평가 실패: {str(e)}"
+    
+    def _build_judge_prompt(self, question: str, answer: str) -> str:
         return f"""You are a factuality judge. Evaluate if the given answer contains factual information that can be verified or is reasonable based on the question.
 
 Question: {question}

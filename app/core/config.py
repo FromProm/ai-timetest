@@ -21,10 +21,12 @@ class Settings(BaseSettings):
     
     # Embedding Models
     embedding_models: Dict[str, str] = {
+        # 텍스트 임베딩
         "titan_text": "amazon.titan-embed-text-v1",
         "cohere_multilingual": "cohere.embed-multilingual-v3",
-        "nova_multimodal": "amazon.nova-2-multimodal-embeddings-v1:0",
-        "cohere_v4": "cohere.embed-english-v3.0"
+        # 이미지/멀티모달 임베딩
+        "titan_multimodal": "amazon.titan-embed-image-v1",
+        "cohere_v4": "cohere.embed-v4"
     }
     
     # Judge Model (저렴한 모델)
@@ -77,6 +79,11 @@ class Settings(BaseSettings):
     
     # Mock Mode (테스트용)
     mock_mode: bool = False  # AWS 없이 테스트할 때 True
+    
+    # MCP Settings
+    mcp_enabled: bool = True  # MCP 서버 사용 여부
+    mcp_timeout: int = 30  # MCP 요청 타임아웃 (초)
+    arxiv_mcp_path: str = ""  # ArXiv MCP 실행 파일 경로 (Windows .exe)
     
     class Config:
         env_file = ".env"

@@ -26,3 +26,17 @@ class BaseJudge(ABC):
             분석 결과 텍스트
         """
         pass
+    
+    @abstractmethod
+    async def evaluate_image(self, prompt: str, image_base64: str) -> str:
+        """
+        VLM을 사용한 이미지 평가 메서드
+        
+        Args:
+            prompt: 평가 요청 프롬프트
+            image_base64: base64 인코딩된 이미지
+            
+        Returns:
+            평가 결과 텍스트 (JSON 형식)
+        """
+        pass

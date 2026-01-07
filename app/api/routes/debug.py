@@ -275,3 +275,186 @@ async def get_job_filled_prompts(job_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get prompts: {str(e)}")
+
+
+# ============================================
+# 이미지 미리보기 엔드포인트
+# ============================================
+
+from fastapi.responses import HTMLResponse, Response
+import base64
+
+@router.get("/debug/jobs/{job_id}/images", response_class=HTMLResponse)
+async def preview_job_images(job_id: str):
+    """작업에서 생성된 이미지들을 HTML 페이지로 미리보기"""
+    try:
+        from app.main import context
+        from app.core.schemas import PromptType
+        
+        storage = context.get_storage()
+        job = await storage.get_job(job_id)
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        if job.prompt_type != PromptType.TYPE_B_IMAGE:
+            return HTMLResponse(content=f"""
+            <html>
+            <head><title>Not an Image Job</title></head>
+            <body>
+                <h1>⚠️ 이미지 작업이 아닙니다</h1>
+                <p>Job ID: {job_id}</p>
+                <p>Prompt Type: {job.prompt_type.value}</p>
+                <p>이 엔드포인트는 type_b_image 작업에서만 사용 가능합니다.</p>
+            </body>
+            </html>
+            """)
+        
+        if not job.result or not job.result.execution_results:
+            return HTMLResponse(content=f"""
+            <html>
+            <head><title>No Results</title></head>
+            <body>
+                <h1>⏳ 결과 없음</h1>
+                <p>Job ID: {job_id}</p>
+                <p>Status: {job.status.value}</p>
+                <p>아직 실행 결과가 없습니다.</p>
+            </body>
+            </html>
+            """)
+        
+        # 이미지 추출
+        executions = job.result.execution_results.get('executions', [])
+        
+        html_content = f"""
+        <html>
+        <head>
+            <title>Image Preview - {job_id}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }}
+                h1 {{ color: #333; }}
+                .info {{ background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
+                .input-group {{ background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
+                .input-group h2 {{ color: #666; border-bottom: 1px solid #eee; padding-bottom: 10px; }}
+                .images {{ display: flex; flex-wrap: wrap; gap: 15px; }}
+                .image-card {{ background: #fafafa; padding: 10px; border-radius: 8px; text-align: center; }}
+                .image-card img {{ max-width: 300px; max-height: 300px; border-radius: 4px; }}
+                .image-card p {{ margin: 10px 0 0 0; color: #666; font-size: 14px; }}
+                .no-image {{ color: #999; padding: 50px; background: #eee; border-radius: 4px; }}
+            </style>
+        </head>
+        <body>
+            <h1>🖼️ 이미지 미리보기</h1>
+            <div class="info">
+                <p><strong>Job ID:</strong> {job_id}</p>
+                <p><strong>Prompt:</strong> {job.prompt[:200]}{'...' if len(job.prompt) > 200 else ''}</p>
+                <p><strong>Status:</strong> {job.status.value}</p>
+            </div>
+        """
+        
+        for exec_data in executions:
+            input_idx = exec_data.get('input_index', 0)
+            outputs = exec_data.get('outputs', [])
+            input_content = exec_data.get('input_content', '')[:100]
+            
+            html_content += f"""
+            <div class="input-group">
+                <h2>입력 #{input_idx + 1}: {input_content}{'...' if len(exec_data.get('input_content', '')) > 100 else ''}</h2>
+                <div class="images">
+            """
+            
+            for out_idx, output in enumerate(outputs):
+                if output and len(output) > 100:
+                    # base64 이미지로 가정
+                    # 이미지 타입 감지
+                    if output.startswith('/9j/'):
+                        mime = 'image/jpeg'
+                    else:
+                        mime = 'image/png'
+                    
+                    html_content += f"""
+                    <div class="image-card">
+                        <img src="data:{mime};base64,{output}" alt="Output {out_idx + 1}">
+                        <p>출력 #{out_idx + 1}</p>
+                    </div>
+                    """
+                else:
+                    html_content += f"""
+                    <div class="image-card">
+                        <div class="no-image">이미지 없음</div>
+                        <p>출력 #{out_idx + 1}: {output[:50] if output else 'Empty'}</p>
+                    </div>
+                    """
+            
+            html_content += """
+                </div>
+            </div>
+            """
+        
+        html_content += """
+        </body>
+        </html>
+        """
+        
+        return HTMLResponse(content=html_content)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to preview images: {str(e)}")
+
+
+@router.get("/debug/jobs/{job_id}/images/{input_index}/{output_index}")
+async def get_single_image(job_id: str, input_index: int, output_index: int):
+    """특정 이미지를 직접 반환 (PNG/JPEG)"""
+    try:
+        from app.main import context
+        from app.core.schemas import PromptType
+        
+        storage = context.get_storage()
+        job = await storage.get_job(job_id)
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        if job.prompt_type != PromptType.TYPE_B_IMAGE:
+            raise HTTPException(status_code=400, detail="Not an image generation job")
+        
+        if not job.result or not job.result.execution_results:
+            raise HTTPException(status_code=404, detail="No execution results")
+        
+        executions = job.result.execution_results.get('executions', [])
+        
+        # 해당 입력 찾기
+        exec_data = None
+        for e in executions:
+            if e.get('input_index') == input_index:
+                exec_data = e
+                break
+        
+        if not exec_data:
+            raise HTTPException(status_code=404, detail=f"Input {input_index} not found")
+        
+        outputs = exec_data.get('outputs', [])
+        if output_index >= len(outputs):
+            raise HTTPException(status_code=404, detail=f"Output {output_index} not found")
+        
+        output = outputs[output_index]
+        if not output or len(output) < 100:
+            raise HTTPException(status_code=404, detail="No valid image data")
+        
+        # base64 디코딩
+        image_data = base64.b64decode(output)
+        
+        # 이미지 타입 감지
+        if output.startswith('/9j/'):
+            media_type = 'image/jpeg'
+        else:
+            media_type = 'image/png'
+        
+        return Response(content=image_data, media_type=media_type)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get image: {str(e)}")

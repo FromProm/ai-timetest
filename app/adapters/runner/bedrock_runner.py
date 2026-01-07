@@ -33,6 +33,9 @@ class BedrockRunner(BaseRunner):
             # 모델별 요청 형식 구성
             if "anthropic.claude" in model:
                 body = self._build_claude_request(prompt, **kwargs)
+            elif "titan-image-generator" in model:
+                # Titan Image Generator
+                body = self._build_titan_image_request(prompt, **kwargs)
             elif "amazon.titan" in model:
                 body = self._build_titan_request(prompt, **kwargs)
             elif "amazon.nova" in model:
@@ -53,6 +56,8 @@ class BedrockRunner(BaseRunner):
             # 모델별 응답 파싱
             if "anthropic.claude" in model:
                 return self._parse_claude_response(response_body)
+            elif "titan-image-generator" in model:
+                return self._parse_titan_image_response(response_body)
             elif "amazon.titan" in model:
                 return self._parse_titan_response(response_body)
             elif "amazon.nova" in model:
@@ -147,26 +152,87 @@ class BedrockRunner(BaseRunner):
         else:
             raise ModelInvocationError(f"Unsupported Nova model: {model}")
     
-    def _parse_nova_response(self, response: Dict[str, Any], model: str) -> Dict[str, Any]:
-        """Nova 응답 파싱"""
-        if "canvas" in model:
-            # Nova Canvas 이미지 응답
-            images = response.get('images', [])
-            output_text = f"Generated {len(images)} image(s)" if images else "No images generated"
-        else:
-            output_text = "Unknown Nova model response"
+    def _build_titan_image_request(self, prompt: str, **kwargs) -> Dict[str, Any]:
+        """Titan Image Generator 요청 구성"""
+        return {
+            "taskType": "TEXT_IMAGE",
+            "textToImageParams": {
+                "text": prompt,
+                "negativeText": kwargs.get('negative_prompt', '')
+            },
+            "imageGenerationConfig": {
+                "numberOfImages": kwargs.get('number_of_images', 1),
+                "quality": kwargs.get('quality', 'standard'),
+                "cfgScale": kwargs.get('cfg_scale', 8.0),
+                "height": kwargs.get('height', 1024),
+                "width": kwargs.get('width', 1024),
+                "seed": kwargs.get('seed', 0)
+            }
+        }
+    
+    def _parse_titan_image_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        """Titan Image Generator 응답 파싱"""
+        images = response.get('images', [])
         
-        # 토큰 사용량 (Nova는 직접 제공하지 않으므로 근사치)
-        input_tokens = len(prompt.split()) * 0.75 if 'prompt' in locals() else 50
-        output_tokens = len(output_text.split()) * 0.75
+        if images:
+            output = images[0]  # base64 인코딩된 이미지
+        else:
+            output = ""
         
         token_usage = {
-            'input_tokens': int(input_tokens),
-            'output_tokens': int(output_tokens),
-            'total_tokens': int(input_tokens + output_tokens)
+            'input_tokens': 100,
+            'output_tokens': 1000,
+            'total_tokens': 1100
         }
         
         return {
-            'output': output_text,
-            'token_usage': token_usage
+            'output': output,
+            'token_usage': token_usage,
+            'is_image': True,
+            'image_count': len(images)
         }
+    
+    def _parse_nova_response(self, response: Dict[str, Any], model: str) -> Dict[str, Any]:
+        """Nova 응답 파싱"""
+        if "canvas" in model:
+            # Nova Canvas 이미지 응답 - base64 이미지 반환
+            images = response.get('images', [])
+            
+            if images:
+                # 첫 번째 이미지의 base64 데이터 반환
+                output = images[0]  # base64 인코딩된 이미지
+            else:
+                output = ""  # 이미지 생성 실패
+            
+            # Nova Canvas는 토큰 대신 이미지 생성 비용으로 계산
+            # 대략적인 토큰 환산 (1024x1024 이미지 기준)
+            token_usage = {
+                'input_tokens': 100,  # 프롬프트 토큰 근사치
+                'output_tokens': 1000,  # 이미지 생성 비용 환산
+                'total_tokens': 1100
+            }
+            
+            return {
+                'output': output,
+                'token_usage': token_usage,
+                'is_image': True,
+                'image_count': len(images)
+            }
+        else:
+            # 다른 Nova 모델 (텍스트 생성 등)
+            output_text = response.get('output', {}).get('message', {}).get('content', [])
+            if output_text and isinstance(output_text, list):
+                output_text = output_text[0].get('text', '') if output_text else ''
+            else:
+                output_text = str(output_text)
+            
+            token_usage = {
+                'input_tokens': response.get('usage', {}).get('inputTokens', 0),
+                'output_tokens': response.get('usage', {}).get('outputTokens', 0),
+                'total_tokens': response.get('usage', {}).get('totalTokens', 0)
+            }
+            
+            return {
+                'output': output_text,
+                'token_usage': token_usage
+            }
